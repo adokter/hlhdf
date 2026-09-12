@@ -34,7 +34,11 @@ dnl	This file is an input file used by the GNU "autoconf" program to
 dnl	generate the file "configure", which is run during HLHDF
 dnl	installation to configure the system for the local environment.
 
-AC_INIT(./hlhdf/hlhdf.h)
+AC_INIT
+AC_CONFIG_SRCDIR([./hlhdf/hlhdf.h])
+
+m4_include([m4/check_python.m4])
+m4_include([m4/check_numpy.m4])
 
 HLHDF_VERSION=1.0
 HLHDF_PATCH_LEVEL=0
@@ -89,42 +93,6 @@ else
   ac_sys_release=`uname -r`
 fi
 
-AC_ARG_WITH(python,[  --with-python=(yes|no)     Compile for python],
-	    ,withval=yes)
-
-COMPILE_FOR_PYTHON=yes
-
-case $withval in
-  no)
-	COMPILE_FOR_PYTHON=no
-	;;
-  *)
-	;;
-esac
-
-PYBIN=python
-py3support=no
-AC_ARG_ENABLE(py3support,
-  [  --enable-py3support     Builds rave with support for python3.],
-  py3support=$enableval)
-if [[ "x$py3support" = "xyes" ]]; then
-  PYOPT="$PYOPT -DPY3_SUPPORT"
-  PYBIN=python3
-  COMPILE_FOR_PYTHON=yes
-fi
-
-AC_ARG_WITH(py3bin, [  --with-py3bin=python3  What python 3 binary to use],
-		    ,withval=python3)
-if [[ "$PYBIN" = "python3" ]]; then
-  AC_MSG_CHECKING(what python3 binary to use)
-  if [[ "$withval" != "python3" ]]; then
-    PYBIN=$withval
-  fi
-  AC_MSG_RESULT($PYBIN)
-fi
-
-PYTHON_BINARY=$PYBIN
-
 # Check for machine type or hardware-platform (32 bit e.g. = i386 or 64 bit = x86_64):
 bit64="no"
 AC_MSG_CHECKING([hardware platform])
@@ -139,87 +107,20 @@ else
     AC_MSG_RESULT($hardware)
 fi
 
-# Check for programs which are useful when generating
-# the makefile.
-# Hmm, I'd better check the compiler after the python check,
-# seems like I've got slight problems otherwise
-#
+CHECK_PYTHON()
+
+if [[ "$PYTHON_SUPPRESSED" != "yes" ]]; then
+  if [[ "$PYTHON_CHECK_OK" != "yes" -o "$PYTHON_FOUND" != "yes" ]]; then
+    AC_MSG_ERROR([Failed to identify and/or configure python settings])
+  fi
+fi
+
+
 AC_PROG_RANLIB
 AC_PROG_CC
 AC_PROG_CPP
 AC_SUBST(AR)
 AC_CHECK_PROGS(AR, ar aal, ar)
-
-# Check for python version
-PYVERSION=
-if [[ "x$COMPILE_FOR_PYTHON" = "xyes" ]]; then
-  AC_MSG_CHECKING(for python version)
-  PYVERSION=`$PYBIN -c "import sys; print(sys.version[[:3]])"`
-  AC_MSG_RESULT($PYVERSION)
-fi
-
-# Check if python has got distutils (makes life a whole lot easier)
-GOTDISTUTILS=no
-enabledistutils=yes
-AC_ARG_ENABLE(distutil-check,
-  [  --enable-distutil-check     Atempts to use python distutils for inquirying for settings. Defaults to yes.],
-  enabledistutils=$enableval)
-  
-if [[ "x$COMPILE_FOR_PYTHON" = "xyes" -a "x$enabledistutils" = "xyes" ]]; then
-  AC_MSG_CHECKING(for python distutils)
-  GOTDISTUTILS="no"
-  XYZ=`$PYBIN -c "from distutils import sysconfig"`
-  if [[ $? -eq 0 ]]; then
-    GOTDISTUTILS="yes"
-  fi
-  AC_MSG_RESULT($GOTDISTUTILS)
-fi
-
-# Check for exec install dir if distutils not should be used
-PY_EXEC_INSTALLDIR=
-if [[ "x$COMPILE_FOR_PYTHON" = "xyes" -a "x$GOTDISTUTILS" = "xno" ]]; then
-  AC_MSG_CHECKING(for python install dir)
-  PY_EXEC_INSTALLDIR=`$PYBIN -c "import sys; print(sys.exec_prefix)"`
-  AC_MSG_RESULT($PY_EXEC_INSTALLDIR)
-fi
-
-# Atempt to locate Makefile used for building python
-PY_CONFIG_MAKE=
-if [[ "x$COMPILE_FOR_PYTHON" = "xyes" ]]; then
-  AC_MSG_CHECKING(for python Makefile)
-  if [[ "x$GOTDISTUTILS" = "xyes" ]]; then
-    PY_CONFIG_MAKE=`$PYBIN -c "from distutils import sysconfig; print(sysconfig.get_makefile_filename())" | grep -v "^None\$"`
-  else
-    if [[ "x$bit64" = "xyes" ]]; then
-      PY_CONFIG_MAKE="$PY_EXEC_INSTALLDIR/lib64/python$PYVERSION/config/Makefile"
-    fi
-    if [[ ! -f "$PY_CONFIG_MAKE" ]]; then
-      PY_CONFIG_MAKE="$PY_EXEC_INSTALLDIR/lib/python$PYVERSION/config/Makefile"
-    fi
-  fi
-  
-  if [[ ! -f "$PY_CONFIG_MAKE" ]]; then
-    AC_MSG_ERROR(failed to locate Makefile)
-  else
-    AC_MSG_RESULT($PY_CONFIG_MAKE)
-  fi
-fi
-
-#
-# Extract what compiler the python binary was compiled with
-#
-AC_MSG_CHECKING(for the compiler used for generating python)
-if [[ "x$COMPILE_FOR_PYTHON" = "xyes" ]]; then
-  if [[ "x$GOTDISTUTILS" = "xyes" ]]; then
-    PYCC=`$PYBIN -c "from distutils import sysconfig; print(sysconfig.get_config_var(\"CC\"))" | grep -v "^None\$"`
-  else
-    PYCC=`cat $PY_CONFIG_MAKE | sed -n "/^CC=/p" | sed -e "s/CC=//g" | awk '{print $1}'`
-  fi
-  AC_MSG_RESULT($PYCC)
-  CC=$PYCC
-else
-  AC_MSG_RESULT(suppressed)
-fi
 
 dnl Check for programs which are useful when generating
 dnl the makefile.
@@ -238,7 +139,7 @@ esac
 
 #Note, since I've worked a little to determine fortran compiler,
 #I must switch back to 'C' in order to get the rest to work.
-AC_LANG_C
+AC_LANG([C])
 
 AC_PROG_RANLIB
 AC_PROG_CC
@@ -255,73 +156,18 @@ PYLDSHARED=
 PYCCSHARED=
 PYDEFS=
 
-if [[ "x$COMPILE_FOR_PYTHON" = "xyes" ]]; then
-  AC_MSG_CHECKING(for python includes)
-  if [[ "x$GOTDISTUTILS" = "xyes" ]]; then
-    PY_INCLUDES=`$PYBIN -c "from distutils import sysconfig;print(sysconfig.get_python_inc())" | grep -v "^None\$"`
-  else
-    PY_INCLUDES="$PY_EXEC_INSTALLDIR/include/python$PYVERSION"
-  fi
-  AC_MSG_RESULT($PY_INCLUDES)
-  PY_INCLUDES="-I$PY_INCLUDES"
-
-  AC_MSG_CHECKING(for python lib site-packages)
-  if [[ "x$GOTDISTUTILS" = "xyes" ]]; then
-    PY_SITEPACK=`$PYBIN -c "from distutils import sysconfig; print(sysconfig.get_python_lib())" | grep -v "^None\$"`
-  else
-    PY_SITEPACK="$PY_EXEC_INSTALLDIR/lib/python$PYVERSION/site-packages"
-  fi
-  AC_MSG_RESULT($PY_SITEPACK)
-
-  AC_MSG_CHECKING(for python library dir)
-  if [[ "x$GOTDISTUTILS" = "xyes" ]]; then
-    PY_LIBDIR=`$PYBIN -c "from distutils import sysconfig; print(sysconfig.get_config_var('LIBDIR'))" | grep -v "^None\$"`
-  else
-    PY_LIBDIR="$PY_EXEC_INSTALLDIR/lib"
-  fi
-  AC_MSG_RESULT($PY_LIBDIR)
-  
-  dnl Checks for typedefs, structures and compiler characteristics
-  AC_MSG_CHECKING(for python options)
-  if [[ "x$GOTDISTUTILS" = "xyes" ]]; then
-    PYOPT=`$PYBIN -c "from distutils import sysconfig; print(sysconfig.get_config_var(\"OPT\"))" | grep -v "^None\$"`
-  else
-    PYOPT=`cat $PY_CONFIG_MAKE | sed -n "/^OPT=/p" | sed -n -e"s/^OPT=[[ 	]]*\(.*\)/\1/p"`
-  fi
-  AC_MSG_RESULT($PYOPT)
-
-  AC_MSG_CHECKING(for ldflags)
-  if [[ "x$GOTDISTUTILS" = "xyes" ]]; then
-    PYLDFLAGS=`$PYBIN -c "from distutils import sysconfig; print(sysconfig.get_config_var(\"LDFLAGS\"))" | grep -v "^None\$"`
-  else
-    PYLDFLAGS=`cat $PY_CONFIG_MAKE | sed -n "/^LDFLAGS=/p" | sed -n -e"s/^LDFLAGS=[[  ]]*\(.*\)/\1/p"`
-  fi
-  AC_MSG_RESULT($PYLDFLAGS)
-
-  AC_MSG_CHECKING(for ldshared)
-  if [[ "x$GOTDISTUTILS" = "xyes" ]]; then
-    PYLDSHARED=`$PYBIN  -c "from distutils import sysconfig; print(sysconfig.get_config_var(\"LDSHARED\"))" | grep -v "^None\$"`
-  else
-    PYLDSHARED=`cat $PY_CONFIG_MAKE | sed -n "/^LDSHARED=/p" | sed -n -e"s/^LDSHARED=[[   ]]*\(.*\)/\1/p"`
-  fi
-  AC_MSG_RESULT($PYLDSHARED)
-
-  AC_MSG_CHECKING(for ccshared)
-  if [[ "x$GOTDISTUTILS" = "xyes" ]]; then
-    PYCCSHARED=`$PYBIN  -c "from distutils import sysconfig; print(sysconfig.get_config_var(\"CCSHARED\"))" | grep -v "^None\$"`
-  else
-    PYCCSHARED=`cat $PY_CONFIG_MAKE | sed -n "/^CCSHARED=/p" | sed -n -e"s/^CCSHARED=[[ 	]]*\(.*\)/\1/p"`
-  fi
-  AC_MSG_RESULT($PYCCSHARED)
-
-  AC_MSG_CHECKING(for defs)
-  if [[ "x$GOTDISTUTILS" = "xyes" ]]; then
-    PYDEFS=`$PYBIN  -c "from distutils import sysconfig; xyz=sysconfig.get_config_var(\"DEFS\")" | grep -v "^None\$"`
-  else
-    PYDEFS=`cat $PY_CONFIG_MAKE | sed -n "/^DEFS=/p" | sed -n -e"s/^DEFS=[[ 	]]*\(.*\)/\1/p"`
-  fi
-  AC_MSG_RESULT($PYDEFS)
+if [[ "$PYTHON_SUPPRESSED" != "yes" ]]; then
+  COMPILE_FOR_PYTHON="yes"
+  PYBIN="$PYTHON_BINARY"
+  PY_INCLUDES="$PYTHON_INCLUDE"
+  PY_SITEPACK="$PYTHON_SITEPACK"
+  PY_LIBDIR="$PYTHON_LIBDIR"
+  PYOPT="$PYTHON_OPTS"
+  PYLDFLAGS="$PYTHON_LDFLAGS"
+  PYLDSHARED="$PYTHON_LDSHARED"
+  PYCCSHARED="$PYTHON_CCSHARED"
 else
+
 AC_MSG_CHECKING(CCSHARED)
 if test -z "$CCSHARED"
 then
@@ -384,53 +230,13 @@ fi
 AC_MSG_RESULT($PYLDSHARED)
 fi
 
-dnl -----------------------------
-dnl Try to locate the numpy include file 'arrayobject.h' automatically,
-dnl if this does not succeed, then the user has to specify this argument
-dnl manually.
-dnl -----------------------------
-AC_ARG_WITH(numpy,[  --with-numpy=INC     Use the numpy include file],
-		,withval=yes)
-NUMPY_INCLUDE_DIR=
-if [[ "x$COMPILE_FOR_PYTHON" = "xyes" ]]; then
-  case $withval in
-	no)
-		AC_MSG_ERROR(You can not remove dependencies to numpy)
-		;;
-	*)
-		numpy_inc="`echo $withval`"
-		FOUND_NUMPY_INC=no
-		numpy_inc_app=
-      if test "xyes" = "x$numpy_inc"; then
-         TESTNUMPYDIR=`$PYBIN -c "import numpy; print(eval(\"numpy.__\"+\"file__\"))"`
-         if test $? -ne 0; then
-            numpy_inc="$PY_EXEC_INSTALLDIR/include/python$PYVERSION"
-         else
-            numpy_inc=`echo $TESTNUMPYDIR | sed -e"s/\/__init__.pyc//" | sed -e"s/\/__init__.py//"`
-         fi
-		fi
-		if [[ -f $numpy_inc/arrayobject.h ]]; then
-			numpy_inc_app=
-			FOUND_NUMPY_INC=yes
-		elif [[ -f $numpy_inc/numpy/arrayobject.h ]]; then
-			numpy_inc_app="/numpy"
-			FOUND_NUMPY_INC=yes
-      elif [[ -f $numpy_inc/core/include/numpy/arrayobject.h ]]; then
-          numpy_inc_app="/core/include/numpy"
-          FOUND_NUMPY_INC=yes
-      elif [[ -f $numpy_inc/numpy/core/include/numpy/arrayobject.h ]]; then
-          numpy_inc_app="/numpy/core/include/numpy"
-          FOUND_NUMPY_INC=yes
-		fi
-		if test "xyes" != "x$FOUND_NUMPY_INC"; then
-			AC_MSG_ERROR(Could not locate arrayobject.h)
-		fi
-		NUMPY_INCLUDE_DIR="-I$numpy_inc$numpy_inc_app"
-		;;
-  esac
-else
-  AC_MSG_CHECKING(for numpy)
-  AC_MSG_RESULT(suppressed)
+numpy_do_check="yes"
+if [[ "$PYTHON_SUPPRESSED" == "yes" ]]; then
+  numpy_do_check="no"
+fi
+CHECK_NUMPY("$numpy_do_check", "$PYBIN", "$PY_INCLUDES")
+if [[ "$NUMPY_CFG_SUCCESS" = "yes" ]]; then
+  NUMPY_INCLUDE_DIR="$NUMPY_INCLUDE"
 fi
 
 dnl -----------------------------
@@ -489,13 +295,13 @@ LINKER_FORCED_STATIC=""
 LIBS="-Xlinker -Bstatic -lz -Xlinker -Bdynamic"
 
 AC_MSG_CHECKING(Gnu(Linux) linker options ($LIBS))
-AC_TRY_RUN([
+AC_RUN_IFELSE([AC_LANG_SOURCE([[
 #include <stdio.h>
 main()
 {
     int i;
     return 0;
-}],try_ok=yes,try_ok=no,try_ok=no)
+}]])],[try_ok=yes],[try_ok=no],[try_ok=no])
 
 if [[ "x$try_ok" = "xyes" ]]; then
   AC_MSG_RESULT("Yes")
@@ -511,13 +317,13 @@ dnl if you can use a dynamiz libz instead.
 if [[ "$try_ok" = "no" ]]; then
 LIBS=" -Xlinker -Bdynamic -lz"
 AC_MSG_CHECKING(Gnu(Linux) linker options ($LIBS))
-AC_TRY_RUN([
+AC_RUN_IFELSE([AC_LANG_SOURCE([[
 #include <stdio.h>
 main()
 {
     int i;
     return 0;
-}],try_ok=yes,try_ok=no,try_ok=no)
+}]])],[try_ok=yes],[try_ok=no],[try_ok=no])
 if [[ "x$try_ok" = "xyes" ]]; then
   AC_MSG_RESULT("Yes")
   LINKER_FORCED_SHARED="-Xlinker -Bdynamic"
@@ -530,13 +336,13 @@ fi
 if [[ "x$LINKER_FORCED_SHARED" = "x" ]]; then
   LIBS="-no_so -lz -so_archive"
   AC_MSG_CHECKING(OSF1 linker options ($LIBS))
-  AC_TRY_RUN([
+  AC_RUN_IFELSE([AC_LANG_SOURCE([[
 #include <stdio.h>
 main()
 {
      int i;
      return 0;
-}],try_ok=yes,try_ok=no,try_ok=no)
+}]])],[try_ok=yes],[try_ok=no],[try_ok=no])
 
   if [[ "x$try_ok" = "xyes" ]]; then
     AC_MSG_RESULT("Yes")
@@ -550,13 +356,13 @@ fi
 if [[ "x$LINKER_FORCED_SHARED" = "x" ]]; then
   LIBS="-Bstatic -lz -Bdynamic"
   AC_MSG_CHECKING(Sun linker options ($LIBS))
-  AC_TRY_RUN([
+  AC_RUN_IFELSE([AC_LANG_SOURCE([[
 #include <stdio.h>
 main()
 {
     int i;
     return 0;
-}],try_ok=yes,try_ok=no,try_ok=no)
+}]])],[try_ok=yes],[try_ok=no],[try_ok=no])
 
   if [[ "x$try_ok" = "xyes" ]]; then
     AC_MSG_RESULT("Yes")
@@ -570,13 +376,13 @@ fi
 if [[ "x$LINKER_FORCED_SHARED" = "x" ]]; then
   LIBS="-static -lz -dynamic"
   AC_MSG_CHECKING(Linux(Should never work) linker options ($LIBS))
-  AC_TRY_RUN([
+  AC_RUN_IFELSE([AC_LANG_SOURCE([[
 #include <stdio.h>
 main()
 {
     int i;
     return 0;
-}],try_ok=yes,try_ok=no,try_ok=no)
+}]])],[try_ok=yes],[try_ok=no],[try_ok=no])
 
   if [[ "x$try_ok" = "xyes" ]]; then
     AC_MSG_RESULT("Yes")
@@ -673,7 +479,7 @@ if [[ "$FOUND_VERSION" = "1" ]]; then
   MAJOR_H5=$(echo $H5_VERSION | cut -d'.' -f1)
   MINOR_H5=$(echo $H5_VERSION | cut -d'.' -f2)
   if [[ "$MAJOR_H5" != "" -a "$MINOR_H5" != "" ]]; then
-    if [[ $MAJOR_H5 -ge 1 -a $MINOR_H5 -ge 12 ]]; then
+    if [[ \( $MAJOR_H5 -ge 1 -a $MINOR_H5 -ge 12 \) -o $MAJOR_H5 -ge 2 ]]; then
       USE_HDF5_1_12_API=yes
     fi
   fi
@@ -806,13 +612,13 @@ if [[ "x$COMPILE_FOR_FORTRAN" != "xno" ]]; then
 
   if [[ "x$LDFLAGS" != "x" ]]; then
     AC_MSG_CHECKING([Linker Options on $system with $LDFLAGS $LIBS])
-    AC_TRY_RUN([
+    AC_RUN_IFELSE([AC_LANG_SOURCE([[
 #include <stdio.h>
 main()
 {
   int i;
   return 0;
-}],try_ok=yes,try_ok=no,try_ok=no)
+}]])],[try_ok=yes],[try_ok=no],[try_ok=no])
   fi
 
   if [[ "x$try_ok" = "xyes" ]]; then
@@ -833,12 +639,12 @@ case $system in
     CPPFLAGS="-Ae $PYDEFS -I. $HDF5_INCDIR $ZLIB_INCDIR"
     LDFLAGS="-L. $HDF5_LIBDIR $ZLIB_LIBDIR"
     LIBS="$LINKER_FORCED_STATIC -lhdf5 -lz $LINKER_FORCED_SHARED -lm"
-    AC_TRY_RUN([
+    AC_RUN_IFELSE([AC_LANG_SOURCE([[
 #include <hdf5.h>
 main()
 {
   return 0;
-}],try_ok=yes,try_ok=no,try_ok=no)
+}]])],[try_ok=yes],[try_ok=no],[try_ok=no])
     if [[ "x$try_ok" = "xyes" ]]; then
       PYDEFS="-Ae $PYDEFS"
       AC_MSG_RESULT(Yes)
@@ -883,4 +689,5 @@ AC_SUBST(HDF5_INCDIR)
 AC_SUBST(HDF5_LIBDIR)
 AC_SUBST(HDF5_VERSION_CFLAG)
 
-AC_OUTPUT(def.mk)
+AC_CONFIG_FILES([def.mk])
+AC_OUTPUT

@@ -24,6 +24,7 @@ along with HLHDF.  If not, see <http://www.gnu.org/licenses/>.
  *
  * C-definition of a compound type usable from python
  */
+#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION 
 #include <pyhlcompat.h>
 /** To ensure that arrayobject is imported correctly */
 #define HLHDF_PYMODULE_WITH_IMPORT_ARRAY
@@ -333,7 +334,7 @@ static PyTypeObject RaveInfoType_Type = {
     (getattrofunc)_getattr_typeo, /*tp_getattro*/
     (setattrofunc)0,              /*tp_setattro*/
     0,                            /*tp_as_buffer*/
-    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC, /*tp_flags*/
+    Py_TPFLAGS_DEFAULT,           /*tp_flags*/
     0,                            /*tp_doc*/
     (traverseproc)0,              /*tp_traverse*/
     (inquiry)0,                   /*tp_clear*/
@@ -377,7 +378,7 @@ static PyTypeObject RaveInfoObject_Type = {
     (getattrofunc)_getattro_object,/*tp_getattro*/
     (setattrofunc)_setattro_object,/*tp_setattro*/
     0,                            /*tp_as_buffer*/
-    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC, /*tp_flags*/
+    Py_TPFLAGS_DEFAULT,           /*tp_flags*/
     0,                            /*tp_doc*/
     (traverseproc)0,              /*tp_traverse*/
     (inquiry)0,                   /*tp_clear*/
